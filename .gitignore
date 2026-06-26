@@ -1,0 +1,15 @@
+# Ignore secret environment variables
+.env
+.venv
+.env.local
+
+# Ignore dependency directories
+node_modules/
+dist/
+
+# Ignore specific files by extension
+*.log
+*.tmp
+
+# Ignore macOS system files
+.DS_Store
