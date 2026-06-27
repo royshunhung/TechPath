@@ -1,45 +1,43 @@
 "use server";
 
-import { exec } from "child_process";
-import { promisify } from "util";
-import path from "path";
+import { generateObject } from 'ai';
+import { google } from '@ai-sdk/google';
+import { z } from 'zod';
+import PdfParse from 'pdf-parse';
+import fs from 'fs/promises';
+import path from 'path';
 
-const execAsync = promisify(exec);
+export async function parseResumeWithAI(relativeFilePath: string) {
+  try {
+    const absolutePath = path.resolve(relativeFilePath);
+    
+    // 1. Read PDF file into binary buffer natively in Node
+    const fileBuffer = await fs.readFile(absolutePath);
+    
+    // 2. Extract raw plain text from PDF structure
+    const pdfData = await PdfParse(fileBuffer);
+    const rawResumeText = pdfData.text;
 
-export async function testResumeParser(filePath: string) {
-    try {
-        // Enforce fallback key matching the system path requirement
-        const env = { 
-            ...process.env, 
-            GOOGLE_API_KEY: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY 
-        };
-
-        const safePath = path.resolve(filePath);
-        const venvCliPath = path.resolve("./.venv/bin/cvinsight");
-
-        console.log(`[TEST] Running parser on path: ${safePath}`);
-
-        // Execute the CLI tool
-        const { stdout } = await execAsync(`"${venvCliPath}" --resume "${safePath}" --json`, { env });
-
-        // Parse Python's stdout string directly into a JSON object
-        const rawJsonOutput = JSON.parse(stdout);
-
-        console.log("[TEST] Raw parser output received successfully!");
-
-        return {
-            success: true,
-            extractedFields: {
-                skills: rawJsonOutput.skills || [],
-                education: rawJsonOutput.educations || rawJsonOutput.education || [],
-                experience: rawJsonOutput.work_experience || rawJsonOutput.experience || []
-            }
-        };
-    } catch (error) {
-        console.error("[TEST] Parser crashed:", error);
-        return { 
-            success: false, 
-            error: error instanceof Error ? error.message : "Unknown extraction failure" 
-        };
+    if (!rawResumeText.trim()) {
+      throw new Error("PDF contains no readable text layers (scanned image).");
     }
+
+    // 3. Leverage Vercel AI SDK to enforce structural schema compliance
+    const { object } = await generateObject({
+      model: google('gemini-2.0-flash'), // Blazing fast for text processing
+      apiKey: process.env.GEMINI_API_KEY,
+      schema: z.object({
+        skills: z.array(z.string()).describe("List of engineering frameworks, databases, and programming languages found."),
+        education: z.string().describe("A concise summary string of degrees, universities, and graduation status."),
+        experience: z.string().describe("Paragraph summary or markdown bullets capturing prior projects and work roles.")
+      }),
+      prompt: `Analyze the following raw plain-text resume extraction. Isolate data accurately into structured properties:\n\n${rawResumeText}`,
+    });
+
+    return { success: true, data: object };
+
+  } catch (error: any) {
+    console.error("Node resume parsing exception:", error.message || error);
+    return { success: false, error: error.message || "Failed extraction execution." };
+  }
 }
