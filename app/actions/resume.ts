@@ -24,14 +24,17 @@ export async function parseResumeWithAI(relativeFilePath: string) {
 
     // 3. Leverage Vercel AI SDK to enforce structural schema compliance
     const { object } = await generateObject({
-      model: google('gemini-2.0-flash'), // Blazing fast for text processing
-      apiKey: process.env.GEMINI_API_KEY,
+      // CHANGE THIS LINE FROM 'gemini-2.0-flash' TO 'gemini-1.5-flash'
+      model: google('gemini-1.5-flash'), 
+      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
       schema: z.object({
-        skills: z.array(z.string()).describe("List of engineering frameworks, databases, and programming languages found."),
-        education: z.string().describe("A concise summary string of degrees, universities, and graduation status."),
-        experience: z.string().describe("Paragraph summary or markdown bullets capturing prior projects and work roles.")
+        name: z.string().describe("Candidate full name"),
+        email: z.string().describe("Candidate primary email address"),
+        skills: z.array(z.string()).describe("List of code frameworks, languages, systems, and hard skills found."),
+        education: z.string().describe("Academic summaries including majors, years, and schools."),
+        experience: z.string().describe("Markdown list summary mapping employment tracking history.")
       }),
-      prompt: `Analyze the following raw plain-text resume extraction. Isolate data accurately into structured properties:\n\n${rawResumeText}`,
+      prompt: `Extract structural criteria fields out of this plain-text resume:\n\n${unifiedText}`,
     });
 
     return { success: true, data: object };
